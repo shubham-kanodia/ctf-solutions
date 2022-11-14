@@ -1,71 +1,46 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.17;
+pragma solidity ^0.8.7;
 
-/**
- *     @title Phoenixtto
- *     @author Rotcivegaf https://twitter.com/victor93389091 <victorfage@gmail.com>
- *     @dev Within the world of crossovers there is a special one, where the universes of pokemon,
- *         harry potter and solidity intertwine.
- *         In this crossover a mix creature is created between dumbledore's phoenix, a wild ditto and
- *         since we are in the solidity universe this creature is a contract.
- *         We have called it Phoenixtto and it has two important abilities, that of being reborn from
- *         it's ashes after its destruction and that of copying the behavior of another bytecode
- *         Try to capture the Phoenixtto, if you can...
- *     @custom:url https://www.ctfprotocol.com/tracks/eko2022/phoenixtto
- */
-contract Laboratory {
-    address immutable PLAYER;
-    address public getImplementation;
-    address public addr;
-
-    constructor(address _player) {
-        PLAYER = _player;
-    }
-
-    function mergePhoenixDitto() public {
-        reBorn(type(Phoenixtto).creationCode);
-    }
-
-    function reBorn(bytes memory _code) public {
-        address x;
-        assembly {
-            x := create(0, add(0x20, _code), mload(_code))
-        }
-        getImplementation = x;
-
-        _code = hex"5860208158601c335a63aaf10f428752fa158151803b80938091923cf3";
-        assembly {
-            x := create2(0, add(_code, 0x20), mload(_code), 0)
-        }
-        addr = x;
-        Phoenixtto(x).reBorn();
-    }
-
-    function isCaught() external view returns (bool) {
-        return Phoenixtto(addr).owner() == PLAYER;
-    }
+interface IGame {
+    function getBallPossesion() external view returns (address);
 }
 
-contract Phoenixtto {
-    address public owner;
-    bool private _isBorn;
+// "el baile de la gambeta"
+// https://www.youtube.com/watch?v=qzxn85zX2aE
 
-    function reBorn() external {
-        if (_isBorn) return;
+/// @title Pelusa
+/// @author https://twitter.com/eugenioclrc
+/// @notice Its 1986, you are in the football world cup (Mexico86), help Diego score a goal.
+/// @custom:url https://www.ctfprotocol.com/tracks/eko2022/pelusa
+contract Pelusa {
+    address private immutable owner;
 
-        _isBorn = true;
-        owner = address(this);
+    address internal player;
+
+    uint256 public goals = 1;
+
+    constructor() {
+        owner = address(uint160(uint256(keccak256(abi.encodePacked(msg.sender, blockhash(block.number))))));
     }
 
-    function capture(string memory _newOwner) external {
-        if (!_isBorn || msg.sender != tx.origin) return;
+    function passTheBall() external {
+        require(msg.sender.code.length == 0, "Only EOA players");
+        /// @dev "la pelota siempre al 10"
+        require(uint256(uint160(msg.sender)) % 100 == 10, "not allowed");
 
-        address newOwner = address(uint160(uint256(keccak256(abi.encodePacked(_newOwner)))));
-        if (newOwner == msg.sender) {
-            owner = newOwner;
-        } else {
-            selfdestruct(payable(msg.sender));
-            _isBorn = false;
-        }
+        player = msg.sender;
+    }
+
+    function isGoal() public view returns (bool) {
+        // expect ball in owners posession
+        return IGame(player).getBallPossesion() == owner;
+    }
+
+    function shoot() external {
+        require(isGoal(), "missed");
+        /// @dev use "the hand of god" trick
+        (bool success, bytes memory data) = player.delegatecall(abi.encodeWithSignature("handOfGod()"));
+        require(success, "missed");
+        require(uint256(bytes32(data)) == 22_06_1986);
     }
 }
